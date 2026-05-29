@@ -38,7 +38,7 @@
         (for-each-index func (cdr lst) (+ index 1)))))
 
 (define (preview-function picker selection rect frame)
-  (define symbols (module->exports selection))
+  (define symbols '())
   (frame-set-string! frame
                      (+ 1 (area-x rect))
                      (+ 1 (area-y rect))

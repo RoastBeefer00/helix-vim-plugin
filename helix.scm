@@ -16,8 +16,10 @@
 ;; when using this mechanism. We log it, but otherwise Helix will continue
 ;; on business as usual. Keep that in mind if blindly copying this
 ;; configuration.
+(load-package "vim/init.scm")
 (load-package "term.scm")
 (load-package "cogs/file-tree.scm")
+(load-package "cogs/oil.scm")
 (load-package "cogs/recentf.scm")
 (load-package "cogs/git-status-picker.scm")
 (load-package "cogs/scheme-indent.scm")

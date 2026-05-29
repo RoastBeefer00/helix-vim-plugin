@@ -219,10 +219,10 @@
 
   (define found-style
     (~> (style)
-        (style-bg (style->bg (theme-scope-ref "ui.background")))
-        (style-fg (style->fg (theme-scope-ref "ui.text")))))
+        (style-bg (style->bg (theme-scope "ui.background")))
+        (style-fg (style->fg (theme-scope "ui.text")))))
 
-  ; (define found-style (theme-scope-ref "ui.background"))
+  ; (define found-style (theme-scope "ui.background"))
 
   ;; Clear out the target for the terminal
   ;; Ensure that this is within the bounds
@@ -234,12 +234,12 @@
                       (- (area-y block-area) 1)
                       (+ 2 (area-width block-area))
                       (+ 2 (area-height block-area)))
-                (make-block (theme-scope-ref "ui.background") found-style "all" "plain"))
+                (make-block (theme-scope "ui.background") found-style "all" "plain"))
 
   ;; Paint a box around the preview area
   (block/render frame
                 preview-area
-                (make-block (theme-scope-ref "ui.background") found-style "all" "plain"))
+                (make-block (theme-scope "ui.background") found-style "all" "plain"))
 
   ;; If the string has been provided, we should render the values here
   (when (and (function? (Picker-preview-func state)) selection)

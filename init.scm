@@ -35,18 +35,28 @@
 (keymap (global)
         (normal (C-r (f ":recentf-open-files")) (space (l ":load-buffer") (o ":eval-sexpr"))))
 
+; Use explicit string key to avoid macro parsing issues with the - symbol
+(add-global-keybinding (hash "normal" (hash "-" ":oil-open")))
+
+; Apply vim keybindings to global before copying for buffer-specific maps
+(set-vim-keybindings!)
+
 (define scm-keybindings (hash "insert" (hash "ret" ':scheme-indent "C-l" ':insert-lambda)))
 
 ;; Grab whatever the existing keybinding map is
 (define standard-keybindings (deep-copy-global-keybindings))
 
 (define file-tree-base (deep-copy-global-keybindings))
+(define oil-base (deep-copy-global-keybindings))
 
 (merge-keybindings standard-keybindings scm-keybindings)
 (merge-keybindings file-tree-base FILE-TREE-KEYBINDINGS)
+(merge-keybindings oil-base OIL-KEYBINDINGS)
 
 ;; <scratch> + <doc id> is probably the best way to handle this?
-(set-global-buffer-or-extension-keymap (hash "scm" standard-keybindings FILE-TREE file-tree-base))
+(set-global-buffer-or-extension-keymap (hash "scm" standard-keybindings
+                                             FILE-TREE file-tree-base
+                                             OIL-BUFFER oil-base))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;; Options ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
