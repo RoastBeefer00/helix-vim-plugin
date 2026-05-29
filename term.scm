@@ -112,7 +112,9 @@
      base-color]
 
     ; base-color
-    [else (if fg? (style->fg (theme->fg *helix.cx*)) base-color)]))
+    [else (if fg?
+             (style->fg (theme->fg *helix.cx*))
+             (style->bg (theme->bg *helix.cx*)))]))
 
 (define (cell-fg-bg->style base-style base-color-fg base-color-bg fg bg)
   (set-style-bg!
@@ -313,6 +315,29 @@
 
 (define *terminal-fraction* (/ 1 3))
 
+(define *lazygit-mode* #f)
+(define lazygit-stashed-area #f)
+(define lazygit-terminal-area #f)
+
+(define (lazygit-calculate-area state rect)
+  (if (and lazygit-terminal-area (equal? lazygit-stashed-area rect))
+      lazygit-terminal-area
+      (begin
+        (set! lazygit-stashed-area rect)
+        (let* ([pad-x 2]
+               [pad-y 1]
+               [w (- (area-width rect) (* 2 pad-x))]
+               [h (- (area-height rect) (* 2 pad-y) 1)])
+          (set! *default-terminal-cols* w)
+          ;; clip full screen width so the editor is completely hidden (including margins)
+          (set-editor-clip-right! (area-width rect))
+          (term-resize-impl (- h 2) (- w 5))
+          (set! lazygit-terminal-area
+                (area (+ (area-x rect) pad-x)
+                      (+ (area-y rect) pad-y)
+                      w h))
+          lazygit-terminal-area))))
+
 ;; Do as a percentage of the terminal area, rather
 ;; than a fixed size
 (define (alternative-calculate-area state rect)
@@ -441,7 +466,9 @@
   ;; If this is still alive, keep it around
   (unless (unbox (Terminal-kill-switch state))
 
-    (define block-area (alternative-calculate-area state rect))
+    (define block-area (if *lazygit-mode*
+                           (lazygit-calculate-area state rect)
+                           (alternative-calculate-area state rect)))
 
     (define x-offset (+ 1 (area-x block-area)))
     (define y-offset (+ 1 (area-y block-area)))
@@ -1162,24 +1189,105 @@
 
 (define *lazygit* #f)
 
-(define (lazygit-on-start terminal)
-  (pty-process-send-command (Terminal-*pty-process* terminal)
-                            (string-append "cd " (helix-find-workspace) " && lazygit\r")))
+(define (lazygit-event-handler state event)
+  (cond
+    ;; q while focused → close via event-result/close (helix pops component)
+    ;; no modifier check: (not (key-event-modifier event)) fails because 0 is truthy
+    [(and (unbox (Terminal-focused? state))
+          (equal? (key-event-char event) #\q))
+     (kill-pty-process! (Terminal-*pty-process* state))
+     (set! *lazygit-mode* #f)
+     (set! lazygit-terminal-area #f)
+     (set! *lazygit* #f)
+     (set-editor-clip-right! 0)
+     (set-box! (Terminal-kill-switch state) #t)
+     (set-box! (Terminal-focused? state) #f)
+     (set-box! (Terminal-active state) #f)
+     event-result/close]
+    [else (terminal-event-handler state event)]))
+
+(define (lazygit-loop term)
+  (define (inner)
+    (define *pty-process* (Terminal-*pty-process* term))
+    (define *vte* (Terminal-*vte* term))
+    (define *kill-switch* (Terminal-kill-switch term))
+    (if (unbox *kill-switch*)
+        ;; Kill switch set by event handler — helix already removed the component
+        ;; via event-result/close; just clean up any remaining globals
+        (begin
+          (set! *lazygit-mode* #f)
+          (set! lazygit-terminal-area #f)
+          (set! *lazygit* #f))
+        (helix-await-callback (async-try-read-line *pty-process*)
+                              (lambda (line)
+                                (if line
+                                    (begin (vte/advance-bytes *vte* line) (inner))
+                                    ;; PTY exited naturally (exec lazygit quit)
+                                    ;; component still active — pop it ourselves
+                                    (begin
+                                      (set! *lazygit-mode* #f)
+                                      (set! lazygit-terminal-area #f)
+                                      (set! *lazygit* #f)
+                                      (set-editor-clip-right! 0)
+                                      (set-box! (Terminal-kill-switch term) #t)
+                                      (set-box! (Terminal-focused? term) #f)
+                                      (when (unbox (Terminal-active term))
+                                        (set-box! (Terminal-active term) #f)
+                                        (pop-last-component! "lazygit"))))))))
+  (inner))
 
 (define (lazygit)
-  (define term
-    (make-terminal "lazygit"
-                   *default-shell*
-                   *default-terminal-rows*
-                   *default-terminal-cols*
-                   lazygit-on-start
-                   vte/advance-bytes))
-  (set! *lazygit* term)
-  (set-TerminalRegistry-terminals! *terminal-registry* (list term))
-  (set-TerminalRegistry-cursor! *terminal-registry* 0)
-  (show-term term))
+  (define rows *default-terminal-rows*)
+  (define cols *default-terminal-cols*)
+  (define *pty-process* (create-native-pty-system! *default-shell*))
+  (define *vte* (virtual-terminal *pty-process*))
+
+  (vte/resize *vte* rows cols)
+  (pty-resize! *pty-process* rows cols)
+
+  (pty-process-send-command *pty-process*
+                            (string-append "cd " (helix-find-workspace) " && exec lazygit\r"))
+
+  (let ([term (Terminal "lazygit"
+                        (position 0 0)
+                        (box cols)
+                        (box rows)
+                        (box #f)
+                        (box #f)
+                        *pty-process*
+                        *vte*
+                        (style)
+                        (Color/rgb 0 0 0)
+                        (Color/rgb 0 0 0)
+                        (box #f)
+                        (mutable-string)
+                        (vte/empty-cell)
+                        (vte/empty-cell)
+                        (box #f)
+                        (box #f)
+                        terminal-render
+                        lazygit-event-handler
+                        #f  ;; no helix cursor overlay — VTE renders cursor itself
+                        (box #f)
+                        (box #f))])
+    (set! *lazygit* term)
+    (set! *lazygit-mode* #t)
+    (set! lazygit-terminal-area #f)
+    (set-TerminalRegistry-terminals! *terminal-registry* (list term))
+    (set-TerminalRegistry-cursor! *terminal-registry* 0)
+    (lazygit-loop term)
+    (show-term term)))
 
 (define (close-lazygit)
   (when *lazygit*
-    (kill-active-terminal)
-    (set! *lazygit* #f)))
+    (let ([term *lazygit*])
+      (kill-pty-process! (Terminal-*pty-process* term))
+      (set! *lazygit-mode* #f)
+      (set! lazygit-terminal-area #f)
+      (set! *lazygit* #f)
+      (set-editor-clip-right! 0)
+      (set-box! (Terminal-kill-switch term) #t)
+      (set-box! (Terminal-focused? term) #f)
+      (when (unbox (Terminal-active term))
+        (set-box! (Terminal-active term) #f)
+        (pop-last-component! "lazygit")))))
