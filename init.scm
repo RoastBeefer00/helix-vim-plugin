@@ -48,15 +48,20 @@
 
 (define file-tree-base (deep-copy-global-keybindings))
 (define oil-base (deep-copy-global-keybindings))
+(define html-base (deep-copy-global-keybindings))
 
 (merge-keybindings standard-keybindings scm-keybindings)
 (merge-keybindings file-tree-base FILE-TREE-KEYBINDINGS)
 (merge-keybindings oil-base OIL-KEYBINDINGS)
+(merge-keybindings html-base HTML-AUTOCLOSE-KEYBINDINGS)
 
 ;; <scratch> + <doc id> is probably the best way to handle this?
 (set-global-buffer-or-extension-keymap (hash "scm" standard-keybindings
                                              FILE-TREE file-tree-base
-                                             OIL-BUFFER oil-base))
+                                             OIL-BUFFER oil-base
+                                             "html" html-base
+                                             "jsx" html-base
+                                             "tsx" html-base))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;; Options ;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
