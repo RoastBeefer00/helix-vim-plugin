@@ -14,6 +14,7 @@
 (require "visual-motions.scm")
 (require "yank-motions.scm")
 (require "utils.scm")
+(require "../term.scm")
 
 (define vim-keybindings
   (keymap (normal (l ":move-char-right-same-line")
@@ -205,7 +206,8 @@
                   ;; NOTE: this implementation uses the , register
                   ;; so be careful with saving other things there
                   ("," ":vim-repeat-last-find")
-                  (";" ":vim-reverse-last-find"))
+                  (";" ":vim-reverse-last-find")
+                  (space (g ":lazygit")))
           ;; TODO: make full "reflow mode"
           ;; ("=" ":reflow"))
           ;; Select bindings

@@ -62,6 +62,8 @@
          (contract/out set-default-terminal-rows! (->/c int? void?))
          (contract/out set-default-shell! (->/c string? void?))
          xplr
+         lazygit
+         close-lazygit
          open-debug-window
          close-debug-window
          hide-terminal)
@@ -1157,3 +1159,27 @@
   (when *xplr*
     (stop-terminal *xplr*)
     (set! *xplr* #f)))
+
+(define *lazygit* #f)
+
+(define (lazygit-on-start terminal)
+  (pty-process-send-command (Terminal-*pty-process* terminal)
+                            (string-append "cd " (helix-find-workspace) " && lazygit\r")))
+
+(define (lazygit)
+  (define term
+    (make-terminal "lazygit"
+                   *default-shell*
+                   *default-terminal-rows*
+                   *default-terminal-cols*
+                   lazygit-on-start
+                   vte/advance-bytes))
+  (set! *lazygit* term)
+  (set-TerminalRegistry-terminals! *terminal-registry* (list term))
+  (set-TerminalRegistry-cursor! *terminal-registry* 0)
+  (show-term term))
+
+(define (close-lazygit)
+  (when *lazygit*
+    (kill-active-terminal)
+    (set! *lazygit* #f)))
